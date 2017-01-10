@@ -1,11 +1,28 @@
 module App exposing (..)
 
-import Html exposing (Html, text, div, img)
-import Graphics.Render exposing (..)
+import Html exposing (..)
+import Html.Attributes exposing (class, classList)
+import Html.Events exposing (..)
+import Graphics.Render exposing (Point, Form, angle, group, svg, position)
 import LogoForms exposing (logoForms, emptyPoint)
 import MouseEvents exposing (onMouseMove, onDragEnd, onDragStart)
 import Mouse exposing (Position)
 import Array exposing (..)
+
+
+type Action
+    = Drag
+    | Rotate
+    | NoAction
+
+
+type Msg
+    = SelectForm Piece
+    | LeaveForm Position
+    | Move Position
+    | SetPosition Position
+    | SetAction Action
+    | Reset
 
 
 type alias Piece =
@@ -19,6 +36,7 @@ type alias Piece =
 type alias Model =
     { pieces : List Piece
     , selected : Maybe Piece
+    , action : Action
     }
 
 
@@ -64,6 +82,7 @@ initModel =
         , Piece 6 (degrees 90) ( 505, 290 ) Nothing
         ]
     , selected = Nothing
+    , action = NoAction
     }
 
 
@@ -72,35 +91,36 @@ init path =
     ( initModel, initCmd )
 
 
-type Msg
-    = SelectForm Piece
-    | LeaveForm Position
-    | Move Position
-    | SetPosition Position
-
-
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case msg of
-        SetPosition position ->
+    case ( model.action, msg ) of
+        ( _, SetPosition position ) ->
             ( { model | selected = setPositionFix position model.selected }
             , Cmd.none
             )
 
-        SelectForm piece ->
+        ( _, SetAction action ) ->
+            ( { model | action = action }
+            , Cmd.none
+            )
+
+        ( Drag, SelectForm piece ) ->
             ( { model | selected = Just piece }
             , Cmd.none
             )
 
-        LeaveForm position ->
+        ( Drag, LeaveForm position ) ->
             ( { model | selected = Nothing }
             , Cmd.none
             )
 
-        Move position ->
+        ( Drag, Move position ) ->
             ( { model | pieces = updatePieces model position }
             , Cmd.none
             )
+
+        _ ->
+            ( model, Cmd.none )
 
 
 setPositionFix : Position -> Maybe Piece -> Maybe Piece
@@ -182,26 +202,86 @@ movePiece piece =
             |> onDragStart (SelectForm piece)
 
 
-renderCollage : Model -> Html Msg
-renderCollage model =
-    model.pieces
-        |> List.map movePiece
-        |> group
-        |> svg 0 0 800 800
+collageControlls : Model -> Html Msg
+collageControlls model =
+    div [ class "collage-controlls" ]
+        [ text "Edit logo"
+        , button
+            [ classList
+                [ ( "btn", True )
+                , ( "btn-drag", True )
+                , ( "active", model.action == Drag )
+                ]
+            , onClick (SetAction Drag)
+            ]
+            [ Html.text "Move pieces" ]
+        , button
+            [ classList
+                [ ( "btn", True )
+                , ( "btn-rotate", True )
+                , ( "active", model.action == Rotate )
+                ]
+            , onClick (SetAction Rotate)
+            ]
+            [ Html.text "Rotate pieces" ]
+        , button
+            [ class "btn btn-reset"
+            , onClick Reset
+            ]
+            [ Html.text "Reset" ]
+        ]
+
+
+collage : Model -> Html Msg
+collage model =
+    div [ class "collage" ]
+        [ if model.action == NoAction then
+            (text "")
+          else
+            collageControlls model
+        , model.pieces
+            |> List.map movePiece
+            |> group
+            |> svg 0 0 800 800
+        ]
+
+
+controlls : Html Msg
+controlls =
+    div [ class "controlls" ]
+        [ button
+            [ class "btn btn-edit"
+            , onClick (SetAction Drag)
+            ]
+            [ Html.text "edit" ]
+        ]
+
+
+sidebar : Html Msg
+sidebar =
+    div [ class "sidebar" ]
+        [ h1 []
+            [ Html.text "elm-logo.play" ]
+        , controlls
+        ]
 
 
 view : Model -> Html Msg
 view model =
-    div []
-        [ renderCollage model
+    div [ class "grid" ]
+        [ sidebar
+        , collage model
         ]
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    case model.selected of
-        Nothing ->
+    case ( model.selected, model.action ) of
+        ( Nothing, _ ) ->
             Sub.batch [ Mouse.downs SetPosition ]
 
-        Just _ ->
+        ( Just _, Drag ) ->
             Sub.batch [ Mouse.moves Move, Mouse.ups LeaveForm, Mouse.downs SetPosition ]
+
+        _ ->
+            Sub.none
