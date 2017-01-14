@@ -140,19 +140,14 @@ setPositionFix : Position -> Maybe Piece -> Maybe Piece
 setPositionFix position selected =
     case selected of
         Just piece ->
-            case piece.mouseReference of
-                Nothing ->
-                    Just
-                        { piece
-                            | mouseReference =
-                                piece.position
-                                    |> pointToPosition
-                                    |> positionDiff position
-                                    |> Just
-                        }
-
-                Just p ->
-                    Just piece
+            Just
+                { piece
+                    | mouseReference =
+                        piece.position
+                            |> pointToPosition
+                            |> positionDiff position
+                            |> Just
+                }
 
         Nothing ->
             Nothing
