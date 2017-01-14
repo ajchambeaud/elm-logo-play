@@ -1,6 +1,5 @@
-module MouseEvents exposing (onMouseMove, onDragEnd, onDragStart)
+module MouseEvents exposing (onMouseMove, onDragEnd, onDragStart, onRotateStart)
 
-import Html.Events exposing (..)
 import Json.Decode as Json exposing (..)
 import Graphics.Render exposing (..)
 
@@ -38,3 +37,8 @@ onDragEnd =
 onDragStart : msg -> Form msg -> Form msg
 onDragStart =
     simpleOn "mousedown"
+
+
+onRotateStart : (Point -> msg) -> Form msg -> Form msg
+onRotateStart =
+    mouseOn "mousedown"

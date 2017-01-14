@@ -6,6 +6,8 @@ import Html.Events exposing (..)
 import Graphics.Render exposing (Point, Form, angle, group, svg, position)
 import LogoForms exposing (logoForms, emptyPoint)
 import MouseEvents exposing (onMouseMove, onDragEnd, onDragStart)
+import Keyboard exposing (KeyCode)
+import Key exposing (..)
 import Mouse exposing (Position)
 import Array exposing (..)
 
@@ -22,7 +24,10 @@ type Msg
     | Move Position
     | SetPosition Position
     | SetAction Action
+    | KeyPress KeyCode
     | Reset
+    | Cancel
+    | Save
 
 
 type alias Piece =
@@ -100,11 +105,14 @@ update msg model =
             )
 
         ( _, SetAction action ) ->
-            ( { model | action = action }
+            ( { model
+                | action = action
+                , selected = Nothing
+              }
             , Cmd.none
             )
 
-        ( Drag, SelectForm piece ) ->
+        ( _, SelectForm piece ) ->
             ( { model | selected = Just piece }
             , Cmd.none
             )
@@ -116,6 +124,11 @@ update msg model =
 
         ( Drag, Move position ) ->
             ( { model | pieces = updatePieces model position }
+            , Cmd.none
+            )
+
+        ( Rotate, KeyPress keyCode ) ->
+            ( { model | pieces = rotatePieces model keyCode }
             , Cmd.none
             )
 
@@ -188,6 +201,43 @@ updatePieces model position =
                 list
 
 
+rotatePieces : Model -> KeyCode -> List Piece
+rotatePieces model keyCode =
+    let
+        list =
+            model.pieces
+
+        selected =
+            model.selected
+
+        rotate =
+            case Key.fromCode keyCode of
+                ArrowLeft ->
+                    -(degrees 15)
+
+                ArrowRight ->
+                    degrees 15
+
+                _ ->
+                    degrees 0
+    in
+        case selected of
+            Just selectedPiece ->
+                list
+                    |> List.map
+                        (\piece ->
+                            if piece.figure /= selectedPiece.figure then
+                                piece
+                            else
+                                { piece
+                                    | rotation = piece.rotation + rotate
+                                }
+                        )
+
+            Nothing ->
+                list
+
+
 movePiece : Piece -> Form Msg
 movePiece piece =
     let
@@ -246,30 +296,49 @@ collage model =
         ]
 
 
-controlls : Html Msg
-controlls =
+controlls : Model -> Html Msg
+controlls model =
     div [ class "controlls" ]
-        [ button
-            [ class "btn btn-edit"
-            , onClick (SetAction Drag)
-            ]
-            [ Html.text "edit" ]
+        [ if model.action == NoAction then
+            button
+                [ class "btn btn-edit"
+                , onClick (SetAction Drag)
+                ]
+                [ Html.text "edit" ]
+          else
+            text ""
+        , if model.action /= NoAction then
+            button
+                [ class "btn btn-save"
+                , onClick Save
+                ]
+                [ Html.text "save" ]
+          else
+            text ""
+        , if model.action /= NoAction then
+            button
+                [ class "btn btn-cancel"
+                , onClick Cancel
+                ]
+                [ Html.text "cancel" ]
+          else
+            text ""
         ]
 
 
-sidebar : Html Msg
-sidebar =
+sidebar : Model -> Html Msg
+sidebar model =
     div [ class "sidebar" ]
         [ h1 []
             [ Html.text "elm-logo.play" ]
-        , controlls
+        , controlls model
         ]
 
 
 view : Model -> Html Msg
 view model =
     div [ class "grid" ]
-        [ sidebar
+        [ sidebar model
         , collage model
         ]
 
@@ -277,11 +346,23 @@ view model =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     case ( model.selected, model.action ) of
-        ( Nothing, _ ) ->
+        ( Nothing, Drag ) ->
             Sub.batch [ Mouse.downs SetPosition ]
 
         ( Just _, Drag ) ->
-            Sub.batch [ Mouse.moves Move, Mouse.ups LeaveForm, Mouse.downs SetPosition ]
+            Sub.batch
+                [ Mouse.moves Move
+                , Mouse.ups LeaveForm
+                , Mouse.downs SetPosition
+                ]
+
+        ( Nothing, Rotate ) ->
+            Sub.none
+
+        ( Just _, Rotate ) ->
+            Sub.batch
+                [ Keyboard.downs KeyPress
+                ]
 
         _ ->
             Sub.none
