@@ -152,6 +152,14 @@ update msg model =
             , Cmd.none
             )
 
+        ( _, Cancel ) ->
+            ( { model
+                | pieces = initModel.pieces
+                , action = NoAction
+              }
+            , Cmd.none
+            )
+
         ( _, Save ) ->
             ( { model
                 | action = NoAction
