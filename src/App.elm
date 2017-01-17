@@ -3,7 +3,7 @@ module App exposing (..)
 import Html exposing (..)
 import Html.Attributes exposing (class, classList)
 import Html.Events exposing (..)
-import Graphics.Render exposing (Point, Form, angle, group, svg, position)
+import Graphics.Render exposing (Point, Form, angle, group, svg, position, opacity)
 import LogoForms exposing (logoForms, emptyPoint)
 import MouseEvents exposing (onMouseMove, onDragEnd, onDragStart)
 import Keyboard exposing (KeyCode)
@@ -35,13 +35,14 @@ type alias Piece =
     , rotation : Float
     , position : Point
     , mouseReference : Maybe Position
+    , selected : Bool
     }
 
 
 type alias Model =
     { pieces : List Piece
-    , selected : Maybe Piece
     , action : Action
+    , active : Bool
     }
 
 
@@ -78,16 +79,16 @@ initCmd =
 initModel : Model
 initModel =
     { pieces =
-        [ Piece 0 (degrees 180) ( 500, 500 ) Nothing
-        , Piece 1 (degrees 270) ( 295, 495 ) Nothing
-        , Piece 2 (degrees 90) ( 505, 405 ) Nothing
-        , Piece 3 (degrees 0) ( 405, 345 ) Nothing
-        , Piece 4 (degrees 0) ( 355, 345 ) Nothing
-        , Piece 5 (degrees 0) ( 300, 290 ) Nothing
-        , Piece 6 (degrees 90) ( 505, 290 ) Nothing
+        [ Piece 0 (degrees 180) ( 500, 500 ) Nothing False
+        , Piece 1 (degrees 270) ( 295, 495 ) Nothing False
+        , Piece 2 (degrees 90) ( 505, 405 ) Nothing False
+        , Piece 3 (degrees 0) ( 405, 345 ) Nothing False
+        , Piece 4 (degrees 0) ( 355, 345 ) Nothing False
+        , Piece 5 (degrees 0) ( 300, 290 ) Nothing False
+        , Piece 6 (degrees 90) ( 505, 290 ) Nothing False
         ]
-    , selected = Nothing
     , action = NoAction
+    , active = False
     }
 
 
@@ -100,25 +101,39 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( model.action, msg ) of
         ( _, SetPosition position ) ->
-            ( { model | selected = setPositionFix position model.selected }
+            ( { model | pieces = setPositionFix position model.pieces }
             , Cmd.none
             )
 
         ( _, SetAction action ) ->
             ( { model
                 | action = action
-                , selected = Nothing
+                , pieces = unselect model.pieces
               }
             , Cmd.none
             )
 
-        ( _, SelectForm piece ) ->
-            ( { model | selected = Just piece }
+        ( Drag, SelectForm piece ) ->
+            ( { model
+                | pieces = selectPiece piece model.pieces
+                , active = True
+              }
+            , Cmd.none
+            )
+
+        ( Rotate, SelectForm piece ) ->
+            ( { model
+                | pieces = selectPiece piece model.pieces
+                , active = True
+              }
             , Cmd.none
             )
 
         ( Drag, LeaveForm position ) ->
-            ( { model | selected = Nothing }
+            ( { model
+                | pieces = unselect model.pieces
+                , active = False
+              }
             , Cmd.none
             )
 
@@ -132,25 +147,92 @@ update msg model =
             , Cmd.none
             )
 
+        ( _, Reset ) ->
+            ( { model | pieces = initModel.pieces }
+            , Cmd.none
+            )
+
+        ( _, Save ) ->
+            ( { model
+                | action = NoAction
+                , pieces = movePiecesToCenter (distanceToCenter model.pieces) model.pieces
+              }
+            , Cmd.none
+            )
+
         _ ->
             ( model, Cmd.none )
 
 
-setPositionFix : Position -> Maybe Piece -> Maybe Piece
-setPositionFix position selected =
-    case selected of
-        Just piece ->
-            Just
-                { piece
-                    | mouseReference =
-                        piece.position
-                            |> pointToPosition
-                            |> positionDiff position
-                            |> Just
-                }
+setPositionFix : Position -> List Piece -> List Piece
+setPositionFix position pieces =
+    pieces
+        |> List.map
+            (\piece ->
+                if piece.selected then
+                    { piece
+                        | mouseReference =
+                            piece.position
+                                |> pointToPosition
+                                |> positionDiff position
+                                |> Just
+                    }
+                else
+                    piece
+            )
 
-        Nothing ->
-            Nothing
+
+addPoint : Point -> Point -> Point
+addPoint p1 p2 =
+    ( Tuple.first p1 + Tuple.first p2
+    , Tuple.second p1 + Tuple.second p2
+    )
+
+
+diffPoint : Point -> Point -> Point
+diffPoint p1 p2 =
+    ( Tuple.first p1 - Tuple.first p2
+    , Tuple.second p1 - Tuple.second p2
+    )
+
+
+scalePoint : Float -> Point -> Point
+scalePoint num p =
+    ( Tuple.first p * num
+    , Tuple.second p * num
+    )
+
+
+findCenter : List Piece -> Point
+findCenter list =
+    list
+        |> List.map .position
+        |> List.foldl addPoint ( 0, 0 )
+        |> scalePoint (1 / 7)
+
+
+distanceToCenter : List Piece -> Point
+distanceToCenter =
+    findCenter >> (diffPoint ( 400, 400 ))
+
+
+selectPiece : Piece -> List Piece -> List Piece
+selectPiece pieceSelected list =
+    list
+        |> List.map
+            (\piece ->
+                if pieceSelected.figure == piece.figure then
+                    { piece | selected = True }
+                else
+                    { piece | selected = False }
+            )
+
+
+unselect : List Piece -> List Piece
+unselect list =
+    list
+        |> List.map
+            (\piece -> { piece | selected = False })
 
 
 calculateNewPoint : Position -> Maybe Position -> Point -> Point
@@ -171,29 +253,16 @@ calculateNewPoint mousePosition positionFix current =
 
 updatePieces : Model -> Position -> List Piece
 updatePieces model position =
-    let
-        list =
-            model.pieces
-
-        selected =
-            model.selected
-    in
-        case selected of
-            Just selectedPiece ->
-                list
-                    |> List.map
-                        (\piece ->
-                            if piece.figure /= selectedPiece.figure then
-                                piece
-                            else
-                                { piece
-                                    | position = calculateNewPoint position selectedPiece.mouseReference piece.position
-                                    , mouseReference = selectedPiece.mouseReference
-                                }
-                        )
-
-            Nothing ->
-                list
+    model.pieces
+        |> List.map
+            (\piece ->
+                if not piece.selected then
+                    piece
+                else
+                    { piece
+                        | position = calculateNewPoint position piece.mouseReference piece.position
+                    }
+            )
 
 
 rotatePieces : Model -> KeyCode -> List Piece
@@ -201,9 +270,6 @@ rotatePieces model keyCode =
     let
         list =
             model.pieces
-
-        selected =
-            model.selected
 
         rotate =
             case Key.fromCode keyCode of
@@ -216,25 +282,32 @@ rotatePieces model keyCode =
                 _ ->
                     degrees 0
     in
-        case selected of
-            Just selectedPiece ->
-                list
-                    |> List.map
-                        (\piece ->
-                            if piece.figure /= selectedPiece.figure then
-                                piece
-                            else
-                                { piece
-                                    | rotation = piece.rotation + rotate
-                                }
-                        )
-
-            Nothing ->
-                list
+        list
+            |> List.map
+                (\piece ->
+                    if not piece.selected then
+                        piece
+                    else
+                        { piece
+                            | rotation = piece.rotation + rotate
+                        }
+                )
 
 
-movePiece : Piece -> Form Msg
-movePiece piece =
+movePiecesToCenter : Point -> List Piece -> List Piece
+movePiecesToCenter distance pieces =
+    let
+        newPoint position =
+            ( Tuple.first position + Tuple.first distance
+            , Tuple.second position + Tuple.second distance
+            )
+    in
+        pieces
+            |> List.map (\piece -> { piece | position = newPoint piece.position })
+
+
+moveForm : Piece -> Form Msg
+moveForm piece =
     let
         form =
             logoForms
@@ -244,7 +317,18 @@ movePiece piece =
         form
             |> position piece.position
             |> angle piece.rotation
+            |> opacity
+                (if piece.selected then
+                    0.5
+                 else
+                    1
+                )
             |> onDragStart (SelectForm piece)
+
+
+formID : Form Msg -> Form Msg
+formID form =
+    form
 
 
 collageControlls : Model -> Html Msg
@@ -285,7 +369,7 @@ collage model =
           else
             collageControlls model
         , model.pieces
-            |> List.map movePiece
+            |> List.map moveForm
             |> group
             |> svg 0 0 800 800
         ]
@@ -340,21 +424,21 @@ view model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    case ( model.selected, model.action ) of
-        ( Nothing, Drag ) ->
+    case ( model.active, model.action ) of
+        ( False, Drag ) ->
             Sub.batch [ Mouse.downs SetPosition ]
 
-        ( Just _, Drag ) ->
+        ( True, Drag ) ->
             Sub.batch
                 [ Mouse.moves Move
                 , Mouse.ups LeaveForm
                 , Mouse.downs SetPosition
                 ]
 
-        ( Nothing, Rotate ) ->
+        ( False, Rotate ) ->
             Sub.none
 
-        ( Just _, Rotate ) ->
+        ( True, Rotate ) ->
             Sub.batch
                 [ Keyboard.downs KeyPress
                 ]
