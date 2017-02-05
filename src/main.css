@@ -69,3 +69,8 @@ body {
     padding: 10px;
     top: 10px;
 }
+
+.credits {
+  position: absolute;
+  bottom: 10px;
+}

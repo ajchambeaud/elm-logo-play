@@ -1,7 +1,7 @@
 module App exposing (..)
 
 import Html exposing (..)
-import Html.Attributes exposing (class, classList)
+import Html.Attributes exposing (class, classList, href, attribute, src)
 import Html.Events exposing (..)
 import Graphics.Render exposing (Point, Form, angle, group, svg, position, opacity)
 import LogoForms exposing (logoForms, emptyPoint)
@@ -9,6 +9,8 @@ import MouseEvents exposing (onMouseMove, onDragEnd, onDragStart)
 import Keyboard exposing (KeyCode)
 import Key exposing (..)
 import Mouse exposing (Position)
+import AnimationFrame
+import Time exposing (Time)
 import Array exposing (..)
 
 
@@ -19,13 +21,16 @@ type Action
 
 
 type Msg
-    = SelectForm Piece
+    = TimeUpdate Time
+    | Tick Time
+    | SelectForm Piece
     | LeaveForm Position
     | Move Position
     | SetPosition Position
     | SetAction Action
     | KeyPress KeyCode
     | Reset
+    | Edit
     | Cancel
     | Save
 
@@ -39,11 +44,197 @@ type alias Piece =
     }
 
 
+type alias Logo =
+    List Piece
+
+
+type alias Animation =
+    { origin : Logo
+    , current : Logo
+    , destiny : Logo
+    }
+
+
+type alias PieceAnimation =
+    { origin : Piece
+    , current : Piece
+    , destiny : Piece
+    }
+
+
 type alias Model =
-    { pieces : List Piece
+    { elmLogo : Logo
+    , customLogos : List Logo
     , action : Action
     , active : Bool
+    , animation : Animation
+    , counter : Int
+    , animate : Bool
     }
+
+
+nextCustomLogo : Logo -> List Logo -> Logo
+nextCustomLogo previous listLogos =
+    if previous == originalLogo then
+        listLogos
+            |> List.head
+            |> Maybe.withDefault originalLogo
+    else
+        let
+            isPrevious logo =
+                logo == previous
+
+            indexedPrev =
+                listLogos
+                    |> Array.fromList
+                    |> Array.toIndexedList
+                    |> List.filter (\item -> item |> Tuple.second |> isPrevious)
+                    |> List.head
+        in
+            case indexedPrev of
+                Nothing ->
+                    originalLogo
+
+                Just previousLogo ->
+                    listLogos
+                        |> Array.fromList
+                        |> Array.get ((Tuple.first previousLogo) + 1)
+                        |> Maybe.withDefault originalLogo
+
+
+isAnimationFinish : Animation -> Bool
+isAnimationFinish animation =
+    animation.current == animation.destiny
+
+
+nextAnimation : List Logo -> Animation -> Animation
+nextAnimation customLogos animation =
+    if animation.destiny == desarmedLogo then
+        Animation desarmedLogo desarmedLogo (nextCustomLogo animation.origin customLogos)
+    else
+        Animation animation.destiny animation.destiny desarmedLogo
+
+
+nextPosition : Float -> Float -> Float -> Float
+nextPosition origin destiny current =
+    let
+        stop =
+            (origin < destiny && current > destiny) || (origin > destiny && current < destiny) || (origin == destiny)
+    in
+        if stop then
+            destiny
+        else
+            current
+
+
+rotatePiece : Time -> PieceAnimation -> PieceAnimation
+rotatePiece dt ({ origin, current, destiny } as initial) =
+    let
+        a =
+            0.01
+
+        v =
+            0.4
+
+        dir =
+            if origin.rotation < destiny.rotation then
+                (+)
+            else
+                (-)
+
+        x =
+            dir current.rotation (v * dt - 0.5 * a * (dt ^ 2))
+    in
+        { initial
+            | current =
+                { current
+                    | rotation = nextPosition origin.rotation destiny.rotation x
+                }
+        }
+
+
+movePiece : Time -> PieceAnimation -> PieceAnimation
+movePiece dt ({ origin, current, destiny } as initial) =
+    let
+        a =
+            0.01
+
+        v =
+            0.9
+
+        x0 =
+            Tuple.first current.position
+
+        x1 =
+            Tuple.first destiny.position
+
+        y0 =
+            Tuple.second current.position
+
+        y1 =
+            Tuple.second destiny.position
+
+        xOrigin =
+            Tuple.first origin.position
+
+        yOrigin =
+            Tuple.second origin.position
+
+        xDir =
+            if xOrigin < x1 then
+                (+)
+            else
+                (-)
+
+        yDir =
+            if yOrigin < y1 then
+                (+)
+            else
+                (-)
+
+        x =
+            xDir x0 (v * dt - 0.5 * a * (dt ^ 2))
+
+        y =
+            yDir y0 (v * dt - 0.5 * a * (dt ^ 2))
+    in
+        { initial
+            | current =
+                { current
+                    | position = ( nextPosition xOrigin x1 x, nextPosition yOrigin y1 y )
+                }
+        }
+
+
+moveAndRotate : Time -> Piece -> Piece -> Piece -> Piece
+moveAndRotate dt origin current destiny =
+    PieceAnimation origin current destiny
+        |> movePiece dt
+        |> rotatePiece dt
+        |> .current
+
+
+moveAnimationLogo : Animation -> Time -> Animation
+moveAnimationLogo animation t =
+    let
+        newLogoPosition =
+            List.map3
+                (moveAndRotate t)
+                animation.origin
+                animation.current
+                animation.destiny
+    in
+        { animation
+            | current = newLogoPosition
+        }
+
+
+runAnimation : List Logo -> Animation -> Time -> Animation
+runAnimation customLogos animation t =
+    if isAnimationFinish animation then
+        nextAnimation customLogos animation
+    else
+        moveAnimationLogo animation t
 
 
 positionToPoint : Position -> Point
@@ -76,19 +267,39 @@ initCmd =
     Cmd.none
 
 
+originalLogo : Logo
+originalLogo =
+    [ Piece 0 (degrees 180) ( 500, 500 ) Nothing False
+    , Piece 1 (degrees 270) ( 295, 495 ) Nothing False
+    , Piece 2 (degrees 90) ( 505, 405 ) Nothing False
+    , Piece 3 (degrees 0) ( 405, 345 ) Nothing False
+    , Piece 4 (degrees 0) ( 355, 345 ) Nothing False
+    , Piece 5 (degrees 0) ( 300, 290 ) Nothing False
+    , Piece 6 (degrees 90) ( 505, 290 ) Nothing False
+    ]
+
+
+desarmedLogo : Logo
+desarmedLogo =
+    [ Piece 0 5.23 ( 260, 777 ) Nothing False
+    , Piece 1 2.61 ( 150, 504 ) Nothing False
+    , Piece 2 0.26 ( 703, 367 ) Nothing False
+    , Piece 3 5.23 ( 617, 654 ) Nothing False
+    , Piece 4 4.45 ( 328, 115 ) Nothing False
+    , Piece 5 3.66 ( 121, 262 ) Nothing False
+    , Piece 6 3.33 ( 616, 116 ) Nothing False
+    ]
+
+
 initModel : Model
 initModel =
-    { pieces =
-        [ Piece 0 (degrees 180) ( 500, 500 ) Nothing False
-        , Piece 1 (degrees 270) ( 295, 495 ) Nothing False
-        , Piece 2 (degrees 90) ( 505, 405 ) Nothing False
-        , Piece 3 (degrees 0) ( 405, 345 ) Nothing False
-        , Piece 4 (degrees 0) ( 355, 345 ) Nothing False
-        , Piece 5 (degrees 0) ( 300, 290 ) Nothing False
-        , Piece 6 (degrees 90) ( 505, 290 ) Nothing False
-        ]
+    { elmLogo = originalLogo
+    , customLogos = []
     , action = NoAction
     , active = False
+    , animation = Animation originalLogo originalLogo desarmedLogo
+    , counter = 0
+    , animate = False
     }
 
 
@@ -101,21 +312,22 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( model.action, msg ) of
         ( _, SetPosition position ) ->
-            ( { model | pieces = setPositionFix position model.pieces }
+            ( { model | elmLogo = setPositionFix position model.elmLogo }
             , Cmd.none
             )
 
         ( _, SetAction action ) ->
             ( { model
                 | action = action
-                , pieces = unselect model.pieces
+                , elmLogo = unselect model.elmLogo
+                , animate = False
               }
             , Cmd.none
             )
 
         ( Drag, SelectForm piece ) ->
             ( { model
-                | pieces = selectPiece piece model.pieces
+                | elmLogo = selectPiece piece model.elmLogo
                 , active = True
               }
             , Cmd.none
@@ -123,7 +335,7 @@ update msg model =
 
         ( Rotate, SelectForm piece ) ->
             ( { model
-                | pieces = selectPiece piece model.pieces
+                | elmLogo = selectPiece piece model.elmLogo
                 , active = True
               }
             , Cmd.none
@@ -131,30 +343,40 @@ update msg model =
 
         ( Drag, LeaveForm position ) ->
             ( { model
-                | pieces = unselect model.pieces
+                | elmLogo = unselect model.elmLogo
                 , active = False
               }
             , Cmd.none
             )
 
         ( Drag, Move position ) ->
-            ( { model | pieces = updatePieces model position }
+            ( { model | elmLogo = updatePieces model position }
             , Cmd.none
             )
 
         ( Rotate, KeyPress keyCode ) ->
-            ( { model | pieces = rotatePieces model keyCode }
+            ( { model | elmLogo = rotatePieces model keyCode }
             , Cmd.none
             )
 
         ( _, Reset ) ->
-            ( { model | pieces = initModel.pieces }
+            ( { model | elmLogo = initModel.elmLogo }
+            , Cmd.none
+            )
+
+        ( _, Edit ) ->
+            ( { model
+                | action = Drag
+                , elmLogo = originalLogo
+                , animation = initModel.animation
+                , animate = False
+              }
             , Cmd.none
             )
 
         ( _, Cancel ) ->
             ( { model
-                | pieces = initModel.pieces
+                | elmLogo = initModel.elmLogo
                 , action = NoAction
               }
             , Cmd.none
@@ -163,8 +385,35 @@ update msg model =
         ( _, Save ) ->
             ( { model
                 | action = NoAction
-                , pieces = movePiecesToCenter (distanceToCenter model.pieces) model.pieces
+                , elmLogo = initModel.elmLogo
+                , customLogos = (movePiecesToCenter (distanceToCenter model.elmLogo) model.elmLogo) :: model.customLogos
               }
+            , Cmd.none
+            )
+
+        ( NoAction, Tick time ) ->
+            ( { model
+                | counter =
+                    if model.counter == 2 then
+                        0
+                    else
+                        (model.counter + 1)
+                , animate =
+                    if model.counter == 2 || model.animation.current == desarmedLogo then
+                        True
+                    else
+                        False
+                , animation =
+                    if isAnimationFinish model.animation then
+                        nextAnimation model.customLogos model.animation
+                    else
+                        model.animation
+              }
+            , Cmd.none
+            )
+
+        ( NoAction, TimeUpdate time ) ->
+            ( animateModel time model
             , Cmd.none
             )
 
@@ -172,9 +421,27 @@ update msg model =
             ( model, Cmd.none )
 
 
-setPositionFix : Position -> List Piece -> List Piece
-setPositionFix position pieces =
-    pieces
+animateModel : Time -> Model -> Model
+animateModel t model =
+    let
+        animation =
+            runAnimation model.customLogos model.animation t
+    in
+        { model
+            | counter = 0
+            , elmLogo = animation.current
+            , animation = animation
+            , animate =
+                if isAnimationFinish animation && animation.current /= desarmedLogo then
+                    False
+                else
+                    True
+        }
+
+
+setPositionFix : Position -> Logo -> Logo
+setPositionFix position elmLogo =
+    elmLogo
         |> List.map
             (\piece ->
                 if piece.selected then
@@ -211,7 +478,7 @@ scalePoint num p =
     )
 
 
-findCenter : List Piece -> Point
+findCenter : Logo -> Point
 findCenter list =
     list
         |> List.map .position
@@ -219,12 +486,12 @@ findCenter list =
         |> scalePoint (1 / 7)
 
 
-distanceToCenter : List Piece -> Point
+distanceToCenter : Logo -> Point
 distanceToCenter =
     findCenter >> (diffPoint ( 400, 400 ))
 
 
-selectPiece : Piece -> List Piece -> List Piece
+selectPiece : Piece -> Logo -> Logo
 selectPiece pieceSelected list =
     list
         |> List.map
@@ -236,7 +503,7 @@ selectPiece pieceSelected list =
             )
 
 
-unselect : List Piece -> List Piece
+unselect : Logo -> Logo
 unselect list =
     list
         |> List.map
@@ -259,9 +526,9 @@ calculateNewPoint mousePosition positionFix current =
                 current
 
 
-updatePieces : Model -> Position -> List Piece
+updatePieces : Model -> Position -> Logo
 updatePieces model position =
-    model.pieces
+    model.elmLogo
         |> List.map
             (\piece ->
                 if not piece.selected then
@@ -273,11 +540,11 @@ updatePieces model position =
             )
 
 
-rotatePieces : Model -> KeyCode -> List Piece
+rotatePieces : Model -> KeyCode -> Logo
 rotatePieces model keyCode =
     let
         list =
-            model.pieces
+            model.elmLogo
 
         rotate =
             case Key.fromCode keyCode of
@@ -302,16 +569,22 @@ rotatePieces model keyCode =
                 )
 
 
-movePiecesToCenter : Point -> List Piece -> List Piece
-movePiecesToCenter distance pieces =
+movePiecesToCenter : Point -> Logo -> Logo
+movePiecesToCenter distance elmLogo =
     let
         newPoint position =
             ( Tuple.first position + Tuple.first distance
             , Tuple.second position + Tuple.second distance
             )
     in
-        pieces
-            |> List.map (\piece -> { piece | position = newPoint piece.position })
+        elmLogo
+            |> List.map
+                (\piece ->
+                    { piece
+                        | position = newPoint piece.position
+                        , mouseReference = Nothing
+                    }
+                )
 
 
 moveForm : Piece -> Form Msg
@@ -334,11 +607,6 @@ moveForm piece =
             |> onDragStart (SelectForm piece)
 
 
-formID : Form Msg -> Form Msg
-formID form =
-    form
-
-
 collageControlls : Model -> Html Msg
 collageControlls model =
     div [ class "collage-controlls" ]
@@ -351,7 +619,7 @@ collageControlls model =
                 ]
             , onClick (SetAction Drag)
             ]
-            [ Html.text "Move pieces" ]
+            [ Html.text "Move piece" ]
         , button
             [ classList
                 [ ( "btn", True )
@@ -360,7 +628,7 @@ collageControlls model =
                 ]
             , onClick (SetAction Rotate)
             ]
-            [ Html.text "Rotate pieces" ]
+            [ Html.text "Rotate piece" ]
         , button
             [ class "btn btn-reset"
             , onClick Reset
@@ -376,7 +644,7 @@ collage model =
             (text "")
           else
             collageControlls model
-        , model.pieces
+        , model.elmLogo
             |> List.map moveForm
             |> group
             |> svg 0 0 800 800
@@ -389,7 +657,7 @@ controlls model =
         [ if model.action == NoAction then
             button
                 [ class "btn btn-edit"
-                , onClick (SetAction Drag)
+                , onClick Edit
                 ]
                 [ Html.text "edit" ]
           else
@@ -413,12 +681,29 @@ controlls model =
         ]
 
 
+forkMeRibbon : Html Msg
+forkMeRibbon =
+    a [ href "https://github.com/ajchambeaud/elm-logo-play" ]
+        [ img [ attribute "data-canonical-src" "https://s3.amazonaws.com/github/ribbons/forkme_left_orange_ff7600.png", src "https://camo.githubusercontent.com/8b6b8ccc6da3aa5722903da7b58eb5ab1081adee/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f6c6566745f6f72616e67655f6666373630302e706e67", attribute "style" "position: absolute; top: 0; left: 0; border: 0;" ]
+            []
+        ]
+
+
+credits : Html Msg
+credits =
+    div [ class "credits" ]
+        [ a [ class "twitter", href "https://twitter.com/ajchambeaud" ] [ Html.text "Made with 🌳 by @ajchambeaud" ]
+        ]
+
+
 sidebar : Model -> Html Msg
 sidebar model =
     div [ class "sidebar" ]
         [ h1 []
             [ Html.text "elm-logo.play" ]
         , controlls model
+        , credits
+        , forkMeRibbon
         ]
 
 
@@ -432,23 +717,33 @@ view model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    case ( model.active, model.action ) of
-        ( False, Drag ) ->
+    case ( model.active, model.action, model.animate ) of
+        ( False, Drag, False ) ->
             Sub.batch [ Mouse.downs SetPosition ]
 
-        ( True, Drag ) ->
+        ( True, Drag, False ) ->
             Sub.batch
                 [ Mouse.moves Move
                 , Mouse.ups LeaveForm
                 , Mouse.downs SetPosition
                 ]
 
-        ( False, Rotate ) ->
+        ( False, Rotate, False ) ->
             Sub.none
 
-        ( True, Rotate ) ->
+        ( True, Rotate, False ) ->
             Sub.batch
                 [ Keyboard.downs KeyPress
+                ]
+
+        ( _, NoAction, True ) ->
+            Sub.batch
+                [ AnimationFrame.diffs TimeUpdate
+                ]
+
+        ( _, NoAction, False ) ->
+            Sub.batch
+                [ Time.every Time.second Tick
                 ]
 
         _ ->
