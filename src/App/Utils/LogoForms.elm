@@ -1,4 +1,4 @@
-module LogoForms exposing (logoForms, emptyPoint)
+module App.Utils.LogoForms exposing (logoForms, emptyPoint)
 
 import Color exposing (..)
 import Graphics.Render exposing (..)

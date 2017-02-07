@@ -1,4 +1,4 @@
-module Key exposing (..)
+module App.Utils.Key exposing (..)
 
 
 type Key

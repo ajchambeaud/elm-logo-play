@@ -1,4 +1,4 @@
-module MouseEvents exposing (onMouseMove, onDragEnd, onDragStart, onRotateStart)
+module App.Utils.MouseEvents exposing (onMouseMove, onDragEnd, onDragStart, onRotateStart)
 
 import Json.Decode as Json exposing (..)
 import Graphics.Render exposing (..)

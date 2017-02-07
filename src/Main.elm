@@ -1,9 +1,11 @@
 module Main exposing (..)
 
-import App exposing (..)
-import Html exposing (programWithFlags)
+import App.View exposing (view)
+import App.State exposing (init, update, subscriptions)
+import App.Types exposing (Model, Msg)
+import Html exposing (program)
 
 
-main : Program String Model Msg
+main : Program Never Model Msg
 main =
-    programWithFlags { view = view, init = init, update = update, subscriptions = subscriptions }
+    program { view = view, init = init, update = update, subscriptions = subscriptions }
