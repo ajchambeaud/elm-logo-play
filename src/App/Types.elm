@@ -25,6 +25,10 @@ type Msg
     | Edit
     | Cancel
     | Save
+    | UserError String
+    | UserUpdate User
+    | Login
+    | Logout
 
 
 type alias Piece =
@@ -61,6 +65,12 @@ type alias NumAnimation =
     }
 
 
+type alias User =
+    { id : String
+    , name : String
+    }
+
+
 type alias Model =
     { elmLogo : Logo
     , customLogos : List Logo
@@ -69,6 +79,8 @@ type alias Model =
     , animation : Animation
     , counter : Int
     , animate : Bool
+    , user : Maybe User
+    , loginError : Maybe String
     }
 
 

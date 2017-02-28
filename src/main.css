@@ -15,6 +15,7 @@ body {
 }
 
 .collage {
+  position: relative;
   width: 70%;
   background-color: white;
   display: flex;
@@ -24,6 +25,7 @@ body {
 }
 
 .sidebar {
+  position: relative;
   width: 30%;
   display: flex;
   align-items: center;
@@ -58,19 +60,40 @@ body {
   background-color: rgb(241, 77, 77)
 }
 
+.btn-login {
+  background-color: rgb(96, 181, 204);
+}
+
+.btn-login span {
+  margin-right: 5px;
+}
+
 .controls {
   width: 100%;
   display: flex;
 }
 
-.collage-controlls {
+.controlls-container {
     position: absolute;
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
     background: #f5f5f5;
     padding: 10px;
-    top: 10px;
+    top: 0;
+}
+
+.user-name {
+    font-size: medium;
+    color: white;
 }
 
 .credits {
   position: absolute;
+  color: #e37600;
   bottom: 10px;
+}
+
+.credits a {
+  color: #e37600
 }

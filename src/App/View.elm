@@ -30,11 +30,52 @@ moveForm piece =
             |> onDragStart (SelectForm piece)
 
 
-collageControlls : Model -> Html Msg
-collageControlls model =
-    div [ class "collage-controlls" ]
-        [ text "Edit logo"
-        , button
+controllsContainer : Model -> Html Msg
+controllsContainer model =
+    div [ class "controlls-container" ]
+        [ mainControlls model
+        , if model.action == NoAction then
+            (text "")
+          else
+            actionControlls model
+        , userMenu model
+        ]
+
+
+mainControlls : Model -> Html Msg
+mainControlls model =
+    div [ class "main-controlls" ]
+        [ if model.action == NoAction then
+            button
+                [ class "btn btn-edit"
+                , onClick Edit
+                ]
+                [ Html.text "Create or edit your logo" ]
+          else
+            text ""
+        , if model.action /= NoAction then
+            button
+                [ class "btn btn-save"
+                , onClick Save
+                ]
+                [ Html.text "save" ]
+          else
+            text ""
+        , if model.action /= NoAction then
+            button
+                [ class "btn btn-cancel"
+                , onClick Cancel
+                ]
+                [ Html.text "cancel" ]
+          else
+            text ""
+        ]
+
+
+actionControlls : Model -> Html Msg
+actionControlls model =
+    div [ class "action-controlls" ]
+        [ button
             [ classList
                 [ ( "btn", True )
                 , ( "btn-drag", True )
@@ -60,47 +101,30 @@ collageControlls model =
         ]
 
 
+userMenu : Model -> Html Msg
+userMenu model =
+    div [ class "user-logout" ]
+        [ button
+            [ class "btn btn-logout"
+            , onClick Logout
+            ]
+            [ Html.text "logout" ]
+        ]
+
+
 collage : Model -> Html Msg
 collage model =
     div [ class "collage" ]
-        [ if model.action == NoAction then
-            (text "")
-          else
-            collageControlls model
+        [ case model.user of
+            Nothing ->
+                text ""
+
+            Just user ->
+                controllsContainer model
         , model.elmLogo
             |> List.map moveForm
             |> group
             |> svg 0 0 800 800
-        ]
-
-
-controlls : Model -> Html Msg
-controlls model =
-    div [ class "controlls" ]
-        [ if model.action == NoAction then
-            button
-                [ class "btn btn-edit"
-                , onClick Edit
-                ]
-                [ Html.text "edit" ]
-          else
-            text ""
-        , if model.action /= NoAction then
-            button
-                [ class "btn btn-save"
-                , onClick Save
-                ]
-                [ Html.text "save" ]
-          else
-            text ""
-        , if model.action /= NoAction then
-            button
-                [ class "btn btn-cancel"
-                , onClick Cancel
-                ]
-                [ Html.text "cancel" ]
-          else
-            text ""
         ]
 
 
@@ -115,7 +139,8 @@ forkMeRibbon =
 credits : Html Msg
 credits =
     div [ class "credits" ]
-        [ a [ class "twitter", href "https://twitter.com/ajchambeaud" ] [ Html.text "Made with 🌳 by @ajchambeaud" ]
+        [ Html.text "Made with 🌳 by "
+        , a [ class "twitter", href "https://twitter.com/ajchambeaud" ] [ Html.text "@ajchambeaud" ]
         ]
 
 
@@ -124,7 +149,18 @@ sidebar model =
     div [ class "sidebar" ]
         [ h1 []
             [ Html.text "elm-logo.play" ]
-        , controlls model
+        , case model.user of
+            Just user ->
+                div [ class "user-name" ] [ text user.name ]
+
+            Nothing ->
+                button
+                    [ class "btn btn-login"
+                    , onClick Login
+                    ]
+                    [ span [ class "fa fa-twitter" ] []
+                    , text "Login with Twitter"
+                    ]
         , credits
         , forkMeRibbon
         ]

@@ -49,6 +49,18 @@ desarmedLogo =
     ]
 
 
+swanLogo : Logo
+swanLogo =
+    [ Piece 0 6.28 ( 218.42, 431.57 ) Nothing False
+    , Piece 1 -0.78 ( 280.42, 577.57 ) Nothing False
+    , Piece 2 7.06 ( 454.42, 252.57 ) Nothing False
+    , Piece 3 0 ( 401.42, 359.57 ) Nothing False
+    , Piece 4 1.57 ( 500.42, 416.57 ) Nothing False
+    , Piece 5 1.57 ( 450.42, 253.57 ) Nothing False
+    , Piece 6 8.63 ( 495.42, 508.57 ) Nothing False
+    ]
+
+
 nextCustomLogo : Logo -> List Logo -> Logo
 nextCustomLogo previous listLogos =
     if previous == originalLogo then

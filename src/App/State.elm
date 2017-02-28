@@ -1,39 +1,60 @@
-module App.State exposing (..)
+port module App.State exposing (..)
 
-import App.Utils.Animation exposing (isAnimationFinish, nextAnimation, runAnimation, originalLogo, desarmedLogo)
+import App.Utils.Animation exposing (isAnimationFinish, nextAnimation, runAnimation, originalLogo, desarmedLogo, swanLogo)
 import App.Utils.Editor exposing (setPositionFix, selectPiece, unselect, updatePieces, rotatePieces, distanceToCenter, movePiecesToCenter)
 import App.Types exposing (..)
 import Keyboard exposing (KeyCode)
 import Mouse exposing (Position)
 import AnimationFrame
 import Time exposing (Time)
+import Json.Decode exposing (int, string, nullable, Decoder, Value, oneOf, null)
+import Json.Decode.Pipeline exposing (decode, required, optional, hardcoded)
 
 
-initCmd : Cmd Msg
-initCmd =
+initialCmd : Cmd Msg
+initialCmd =
     Cmd.none
 
 
-initModel : Model
-initModel =
+initialModel : Model
+initialModel =
     { elmLogo = originalLogo
-    , customLogos = []
+    , customLogos = [ swanLogo ]
     , action = NoAction
     , active = False
     , animation = Animation originalLogo originalLogo desarmedLogo
     , counter = 0
     , animate = False
+    , user = Nothing
+    , loginError = Nothing
     }
 
 
-init : ( Model, Cmd Msg )
-init =
-    ( initModel, initCmd )
+init : Json.Decode.Value -> ( Model, Cmd Msg )
+init user =
+    case Json.Decode.decodeValue (nullOr userDecoder) user of
+        Err err ->
+            ( { initialModel | loginError = Just err }, initialCmd )
+
+        Ok user ->
+            ( { initialModel | user = user }, Cmd.none )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        UserError err ->
+            ( { model | loginError = Just err }, Cmd.none )
+
+        UserUpdate user ->
+            ( { model | user = Just user }, Cmd.none )
+
+        Login ->
+            ( model, login "" )
+
+        Logout ->
+            ( { model | user = Nothing }, logout "" )
+
         SetPosition position ->
             ( setPosition model position
             , Cmd.none
@@ -161,7 +182,7 @@ rotate model keyCode =
 
 reset : Model -> Model
 reset model =
-    { model | elmLogo = initModel.elmLogo }
+    { model | elmLogo = initialModel.elmLogo }
 
 
 setEditMode : Model -> Model
@@ -169,7 +190,7 @@ setEditMode model =
     { model
         | action = Drag
         , elmLogo = originalLogo
-        , animation = initModel.animation
+        , animation = initialModel.animation
         , animate = False
     }
 
@@ -177,7 +198,7 @@ setEditMode model =
 cancel : Model -> Model
 cancel model =
     { model
-        | elmLogo = initModel.elmLogo
+        | elmLogo = initialModel.elmLogo
         , action = NoAction
     }
 
@@ -186,7 +207,7 @@ save : Model -> Model
 save model =
     { model
         | action = NoAction
-        , elmLogo = initModel.elmLogo
+        , elmLogo = initialModel.elmLogo
         , customLogos = (movePiecesToCenter (distanceToCenter model.elmLogo) model.elmLogo) :: model.customLogos
     }
 
@@ -235,36 +256,83 @@ animateModel t model =
         }
 
 
+port login : String -> Cmd msg
+
+
+port logout : String -> Cmd msg
+
+
+port loginSuccess : (Value -> msg) -> Sub msg
+
+
+port loginError : (String -> msg) -> Sub msg
+
+
+nullOr : Decoder a -> Decoder (Maybe a)
+nullOr decoder =
+    oneOf
+        [ null Nothing
+        , Json.Decode.map Just decoder
+        ]
+
+
+userDecoder : Decoder User
+userDecoder =
+    decode User
+        |> required "uid" string
+        |> required "displayName" string
+
+
+decodeResponse : Json.Decode.Value -> Msg
+decodeResponse json =
+    case Json.Decode.decodeValue userDecoder json of
+        Err err ->
+            UserError err
+
+        Ok user ->
+            UserUpdate user
+
+
+loginSubscriptions : List (Sub Msg)
+loginSubscriptions =
+    [ loginSuccess decodeResponse
+    , loginError UserError
+    ]
+
+
 subscriptions : Model -> Sub Msg
 subscriptions model =
     case ( model.active, model.action, model.animate ) of
         ( False, Drag, False ) ->
-            Sub.batch [ Mouse.downs SetPosition ]
+            Mouse.downs SetPosition
+                :: loginSubscriptions
+                |> Sub.batch
 
         ( True, Drag, False ) ->
-            Sub.batch
-                [ Mouse.moves Move
-                , Mouse.ups LeaveForm
-                , Mouse.downs SetPosition
-                ]
+            [ Mouse.moves Move
+            , Mouse.ups LeaveForm
+            , Mouse.downs SetPosition
+            ]
+                |> List.append loginSubscriptions
+                |> Sub.batch
 
         ( False, Rotate, False ) ->
-            Sub.none
+            Sub.batch loginSubscriptions
 
         ( True, Rotate, False ) ->
-            Sub.batch
-                [ Keyboard.downs KeyPress
-                ]
+            (Keyboard.downs KeyPress)
+                :: loginSubscriptions
+                |> Sub.batch
 
         ( _, NoAction, True ) ->
-            Sub.batch
-                [ AnimationFrame.diffs TimeUpdate
-                ]
+            (AnimationFrame.diffs TimeUpdate)
+                :: loginSubscriptions
+                |> Sub.batch
 
         ( _, NoAction, False ) ->
-            Sub.batch
-                [ Time.every Time.second Tick
-                ]
+            (Time.every Time.second Tick)
+                :: loginSubscriptions
+                |> Sub.batch
 
         _ ->
-            Sub.none
+            Sub.batch loginSubscriptions
