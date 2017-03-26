@@ -27,6 +27,9 @@ type Msg
     | Save
     | UserError String
     | UserUpdate User
+    | UpdateLogoList (List Logo)
+    | UpdateLogoListError String
+    | CloseAlert
     | Login
     | Logout
 
@@ -41,7 +44,9 @@ type alias Piece =
 
 
 type alias Logo =
-    List Piece
+    { logo : List Piece
+    , user : String
+    }
 
 
 type alias Animation =
@@ -68,6 +73,7 @@ type alias NumAnimation =
 type alias User =
     { id : String
     , name : String
+    , customLogo : Maybe Logo
     }
 
 

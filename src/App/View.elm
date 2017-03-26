@@ -8,6 +8,9 @@ import Html.Attributes exposing (class, classList, href, attribute, src)
 import Html.Events exposing (..)
 import Graphics.Render exposing (Point, Form, angle, group, svg, position, opacity)
 import Array exposing (..)
+import Bootstrap.Grid as Grid
+import Bootstrap.Grid.Col as Col
+import Bootstrap.Button as Button
 
 
 moveForm : Piece -> Form Msg
@@ -40,6 +43,36 @@ controllsContainer model =
             actionControlls model
         , userMenu model
         ]
+
+
+getLogoAutor : Model -> String
+getLogoAutor model =
+    let
+        logo =
+            model.elmLogo
+    in
+        if not model.animate && logo.user /= "" then
+            "Made by " ++ logo.user
+        else
+            ""
+
+
+help : Model -> Html Msg
+help model =
+    let
+        helpText =
+            case model.action of
+                NoAction ->
+                    getLogoAutor model
+
+                Drag ->
+                    "Move Piece: use drag and drop to move the pieces"
+
+                Rotate ->
+                    "Rotate pieces: click on the piece and use keys ⬅️ and ➡️ to rotate it"
+    in
+        div [ class "help-container" ]
+            [ text helpText ]
 
 
 mainControlls : Model -> Html Msg
@@ -78,7 +111,7 @@ actionControlls model =
         [ button
             [ classList
                 [ ( "btn", True )
-                , ( "btn-drag", True )
+                , ( "action-btn", True )
                 , ( "active", model.action == Drag )
                 ]
             , onClick (SetAction Drag)
@@ -87,14 +120,14 @@ actionControlls model =
         , button
             [ classList
                 [ ( "btn", True )
-                , ( "btn-rotate", True )
+                , ( "action-btn", True )
                 , ( "active", model.action == Rotate )
                 ]
             , onClick (SetAction Rotate)
             ]
             [ Html.text "Rotate piece" ]
         , button
-            [ class "btn btn-reset"
+            [ class "btn action-btn"
             , onClick Reset
             ]
             [ Html.text "Reset" ]
@@ -112,19 +145,21 @@ userMenu model =
         ]
 
 
-collage : Model -> Html Msg
+collage : Model -> Grid.Column Msg
 collage model =
-    div [ class "collage" ]
+    Grid.col
+        [ Col.xs9, Col.attrs [ class "collage" ] ]
         [ case model.user of
             Nothing ->
                 text ""
 
             Just user ->
                 controllsContainer model
-        , model.elmLogo
+        , model.elmLogo.logo
             |> List.map moveForm
             |> group
             |> svg 0 0 800 800
+        , help model
         ]
 
 
@@ -144,11 +179,12 @@ credits =
         ]
 
 
-sidebar : Model -> Html Msg
+sidebar : Model -> Grid.Column Msg
 sidebar model =
-    div [ class "sidebar" ]
+    Grid.col
+        [ Col.xs3, Col.attrs [ class "sidebar" ] ]
         [ h1 []
-            [ Html.text "elm-logo.play" ]
+            [ Html.text "elm-tangram" ]
         , case model.user of
             Just user ->
                 div [ class "user-name" ] [ text user.name ]
@@ -166,9 +202,42 @@ sidebar model =
         ]
 
 
+topBar : Model -> Html Msg
+topBar model =
+    case model.loginError of
+        Just err ->
+            let
+                _ =
+                    Debug.log err
+            in
+                Grid.row []
+                    [ Grid.col
+                        [ Col.xs12, Col.attrs [ class "topbar" ] ]
+                        [ text "There was an error getting the user information. Try again latter or "
+                        , a [ href "https://github.com/ajchambeaud/elm-logo-play/issues/new" ] [ text "create an issue" ]
+                        , text " \x1F913."
+                        , Button.button
+                            [ Button.small
+                            , Button.danger
+                            , Button.attrs
+                                [ class "ml-1 close-topbar"
+                                , onClick CloseAlert
+                                ]
+                            ]
+                            [ text "x" ]
+                        ]
+                    ]
+
+        Nothing ->
+            text ""
+
+
 view : Model -> Html Msg
 view model =
-    div [ class "grid" ]
-        [ sidebar model
-        , collage model
+    Grid.containerFluid []
+        [ topBar model
+        , Grid.row []
+            [ sidebar model
+            , collage model
+            ]
         ]

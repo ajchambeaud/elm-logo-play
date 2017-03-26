@@ -7,7 +7,7 @@ import Keyboard exposing (KeyCode)
 import Mouse exposing (Position)
 import AnimationFrame
 import Time exposing (Time)
-import Json.Decode exposing (int, string, nullable, Decoder, Value, oneOf, null)
+import Json.Decode exposing (int, float, list, maybe, bool, string, nullable, Decoder, Value, oneOf, null, index, andThen, succeed)
 import Json.Decode.Pipeline exposing (decode, required, optional, hardcoded)
 
 
@@ -19,7 +19,7 @@ initialCmd =
 initialModel : Model
 initialModel =
     { elmLogo = originalLogo
-    , customLogos = [ swanLogo ]
+    , customLogos = []
     , action = NoAction
     , active = False
     , animation = Animation originalLogo originalLogo desarmedLogo
@@ -54,6 +54,15 @@ update msg model =
 
         Logout ->
             ( { model | user = Nothing }, logout "" )
+
+        CloseAlert ->
+            ( { model | loginError = Nothing }, logout "" )
+
+        UpdateLogoListError err ->
+            ( { model | loginError = Just err }, Cmd.none )
+
+        UpdateLogoList list ->
+            ( { model | customLogos = list }, Cmd.none )
 
         SetPosition position ->
             ( setPosition model position
@@ -102,7 +111,7 @@ update msg model =
 
         Save ->
             ( save model
-            , Cmd.none
+            , saveCustomLogo model
             )
 
         Tick time ->
@@ -114,6 +123,16 @@ update msg model =
             ( animateModel time model
             , Cmd.none
             )
+
+
+saveCustomLogo : Model -> Cmd Msg
+saveCustomLogo model =
+    case model.user of
+        Just user ->
+            savePort <| movePiecesToCenter (distanceToCenter model.elmLogo) model.elmLogo
+
+        Nothing ->
+            Cmd.none
 
 
 setPosition : Model -> Position -> Model
@@ -187,12 +206,17 @@ reset model =
 
 setEditMode : Model -> Model
 setEditMode model =
-    { model
-        | action = Drag
-        , elmLogo = originalLogo
-        , animation = initialModel.animation
-        , animate = False
-    }
+    case model.user of
+        Just user ->
+            { model
+                | action = Drag
+                , elmLogo = Maybe.withDefault { originalLogo | user = user.name } user.customLogo
+                , animation = initialModel.animation
+                , animate = False
+            }
+
+        Nothing ->
+            model
 
 
 cancel : Model -> Model
@@ -208,7 +232,6 @@ save model =
     { model
         | action = NoAction
         , elmLogo = initialModel.elmLogo
-        , customLogos = (movePiecesToCenter (distanceToCenter model.elmLogo) model.elmLogo) :: model.customLogos
     }
 
 
@@ -262,7 +285,13 @@ port login : String -> Cmd msg
 port logout : String -> Cmd msg
 
 
+port savePort : Logo -> Cmd msg
+
+
 port loginSuccess : (Value -> msg) -> Sub msg
+
+
+port customLogosUpdated : (Value -> msg) -> Sub msg
 
 
 port loginError : (String -> msg) -> Sub msg
@@ -276,15 +305,60 @@ nullOr decoder =
         ]
 
 
+decodePosition : Decoder Position
+decodePosition =
+    decode Position
+        |> required "x" int
+        |> required "y" int
+
+
+arrayAsTuple2 : Decoder a -> Decoder a -> Decoder ( a, a )
+arrayAsTuple2 a b =
+    index 0 a
+        |> andThen
+            (\aVal ->
+                index 1 b
+                    |> andThen (\bVal -> succeed ( aVal, bVal ))
+            )
+
+
+decodePiece : Decoder Piece
+decodePiece =
+    decode Piece
+        |> required "figure" int
+        |> required "rotation" float
+        |> required "position" (arrayAsTuple2 float float)
+        |> optional "mouseReference" (maybe decodePosition) Nothing
+        |> required "selected" bool
+
+
 userDecoder : Decoder User
 userDecoder =
     decode User
         |> required "uid" string
         |> required "displayName" string
+        |> required "customLogo" (maybe customLogosDecoder)
 
 
-decodeResponse : Json.Decode.Value -> Msg
-decodeResponse json =
+customLogosDecoder : Decoder Logo
+customLogosDecoder =
+    decode Logo
+        |> required "logo" (list decodePiece)
+        |> required "user" string
+
+
+decodeListResponse : Json.Decode.Value -> Msg
+decodeListResponse json =
+    case Json.Decode.decodeValue (list customLogosDecoder) json of
+        Err err ->
+            UpdateLogoListError err
+
+        Ok logos ->
+            UpdateLogoList logos
+
+
+decodeUserResponse : Json.Decode.Value -> Msg
+decodeUserResponse json =
     case Json.Decode.decodeValue userDecoder json of
         Err err ->
             UserError err
@@ -295,8 +369,9 @@ decodeResponse json =
 
 loginSubscriptions : List (Sub Msg)
 loginSubscriptions =
-    [ loginSuccess decodeResponse
+    [ loginSuccess decodeUserResponse
     , loginError UserError
+    , customLogosUpdated decodeListResponse
     ]
 
 

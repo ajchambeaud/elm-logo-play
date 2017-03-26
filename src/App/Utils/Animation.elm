@@ -27,50 +27,59 @@ rotationA =
 
 originalLogo : Logo
 originalLogo =
-    [ Piece 0 (degrees 180) ( 500, 500 ) Nothing False
-    , Piece 1 (degrees 270) ( 295, 495 ) Nothing False
-    , Piece 2 (degrees 90) ( 505, 405 ) Nothing False
-    , Piece 3 (degrees 0) ( 405, 345 ) Nothing False
-    , Piece 4 (degrees 0) ( 355, 345 ) Nothing False
-    , Piece 5 (degrees 0) ( 300, 290 ) Nothing False
-    , Piece 6 (degrees 90) ( 505, 290 ) Nothing False
-    ]
+    { logo =
+        [ Piece 0 (degrees 180) ( 500, 500 ) Nothing False
+        , Piece 1 (degrees 270) ( 295, 495 ) Nothing False
+        , Piece 2 (degrees 90) ( 505, 405 ) Nothing False
+        , Piece 3 (degrees 0) ( 405, 345 ) Nothing False
+        , Piece 4 (degrees 0) ( 355, 345 ) Nothing False
+        , Piece 5 (degrees 0) ( 300, 290 ) Nothing False
+        , Piece 6 (degrees 90) ( 505, 290 ) Nothing False
+        ]
+    , user = ""
+    }
 
 
 desarmedLogo : Logo
 desarmedLogo =
-    [ Piece 0 5.23 ( 260, 777 ) Nothing False
-    , Piece 1 2.61 ( 150, 504 ) Nothing False
-    , Piece 2 0.26 ( 703, 367 ) Nothing False
-    , Piece 3 5.23 ( 617, 654 ) Nothing False
-    , Piece 4 4.45 ( 328, 115 ) Nothing False
-    , Piece 5 3.66 ( 121, 262 ) Nothing False
-    , Piece 6 3.33 ( 616, 116 ) Nothing False
-    ]
+    { logo =
+        [ Piece 0 5.23 ( 260, 777 ) Nothing False
+        , Piece 1 2.61 ( 150, 504 ) Nothing False
+        , Piece 2 0.26 ( 703, 367 ) Nothing False
+        , Piece 3 5.23 ( 617, 654 ) Nothing False
+        , Piece 4 4.45 ( 328, 115 ) Nothing False
+        , Piece 5 3.66 ( 121, 262 ) Nothing False
+        , Piece 6 3.33 ( 616, 116 ) Nothing False
+        ]
+    , user = ""
+    }
 
 
 swanLogo : Logo
 swanLogo =
-    [ Piece 0 6.28 ( 218.42, 431.57 ) Nothing False
-    , Piece 1 -0.78 ( 280.42, 577.57 ) Nothing False
-    , Piece 2 7.06 ( 454.42, 252.57 ) Nothing False
-    , Piece 3 0 ( 401.42, 359.57 ) Nothing False
-    , Piece 4 1.57 ( 500.42, 416.57 ) Nothing False
-    , Piece 5 1.57 ( 450.42, 253.57 ) Nothing False
-    , Piece 6 8.63 ( 495.42, 508.57 ) Nothing False
-    ]
+    { logo =
+        [ Piece 0 6.28 ( 218.42, 431.57 ) Nothing False
+        , Piece 1 -0.78 ( 280.42, 577.57 ) Nothing False
+        , Piece 2 7.06 ( 454.42, 252.57 ) Nothing False
+        , Piece 3 0 ( 401.42, 359.57 ) Nothing False
+        , Piece 4 1.57 ( 500.42, 416.57 ) Nothing False
+        , Piece 5 1.57 ( 450.42, 253.57 ) Nothing False
+        , Piece 6 8.63 ( 495.42, 508.57 ) Nothing False
+        ]
+    , user = ""
+    }
 
 
 nextCustomLogo : Logo -> List Logo -> Logo
 nextCustomLogo previous listLogos =
-    if previous == originalLogo then
+    if previous.logo == originalLogo.logo then
         listLogos
             |> List.head
             |> Maybe.withDefault originalLogo
     else
         let
             isPrevious logo =
-                logo == previous
+                logo.logo == previous.logo
 
             indexedPrev =
                 listLogos
@@ -92,12 +101,12 @@ nextCustomLogo previous listLogos =
 
 isAnimationFinish : Animation -> Bool
 isAnimationFinish animation =
-    animation.current == animation.destiny
+    animation.current.logo == animation.destiny.logo
 
 
 nextAnimation : List Logo -> Animation -> Animation
 nextAnimation customLogos animation =
-    if animation.destiny == desarmedLogo then
+    if animation.destiny.logo == desarmedLogo.logo then
         Animation desarmedLogo desarmedLogo (nextCustomLogo animation.origin customLogos)
     else
         Animation animation.destiny animation.destiny desarmedLogo
@@ -169,12 +178,12 @@ moveAnimationLogo animation t =
         newLogoPosition =
             List.map3
                 (moveAndRotate t)
-                animation.origin
-                animation.current
-                animation.destiny
+                animation.origin.logo
+                animation.current.logo
+                animation.destiny.logo
     in
         { animation
-            | current = newLogoPosition
+            | current = Logo newLogoPosition animation.destiny.user
         }
 
 

@@ -55,25 +55,30 @@ scalePoint num p =
 
 setPositionFix : Position -> Logo -> Logo
 setPositionFix position elmLogo =
-    elmLogo
-        |> List.map
-            (\piece ->
-                if piece.selected then
-                    { piece
-                        | mouseReference =
-                            piece.position
-                                |> pointToPosition
-                                |> positionDiff position
-                                |> Just
-                    }
-                else
-                    piece
-            )
+    let
+        newPosition =
+            elmLogo
+                |> .logo
+                |> List.map
+                    (\piece ->
+                        if piece.selected then
+                            { piece
+                                | mouseReference =
+                                    piece.position
+                                        |> pointToPosition
+                                        |> positionDiff position
+                                        |> Just
+                            }
+                        else
+                            piece
+                    )
+    in
+        { elmLogo | logo = newPosition }
 
 
 findCenter : Logo -> Point
-findCenter list =
-    list
+findCenter logo =
+    logo.logo
         |> List.map .position
         |> List.foldl addPoint ( 0, 0 )
         |> scalePoint (1 / 7)
@@ -85,22 +90,30 @@ distanceToCenter =
 
 
 selectPiece : Piece -> Logo -> Logo
-selectPiece pieceSelected list =
-    list
-        |> List.map
-            (\piece ->
-                if pieceSelected.figure == piece.figure then
-                    { piece | selected = True }
-                else
-                    { piece | selected = False }
-            )
+selectPiece pieceSelected logo =
+    let
+        newLogo =
+            logo.logo
+                |> List.map
+                    (\piece ->
+                        if pieceSelected.figure == piece.figure then
+                            { piece | selected = True }
+                        else
+                            { piece | selected = False }
+                    )
+    in
+        { logo | logo = newLogo }
 
 
 unselect : Logo -> Logo
-unselect list =
-    list
-        |> List.map
-            (\piece -> { piece | selected = False })
+unselect logo =
+    let
+        newLogo =
+            logo.logo
+                |> List.map
+                    (\piece -> { piece | selected = False })
+    in
+        { logo | logo = newLogo }
 
 
 calculateNewPoint : Position -> Maybe Position -> Point -> Point
@@ -121,23 +134,33 @@ calculateNewPoint mousePosition positionFix current =
 
 updatePieces : Model -> Position -> Logo
 updatePieces model position =
-    model.elmLogo
-        |> List.map
-            (\piece ->
-                if not piece.selected then
-                    piece
-                else
-                    { piece
-                        | position = calculateNewPoint position piece.mouseReference piece.position
-                    }
-            )
+    let
+        elmLogo =
+            model.elmLogo
+
+        pieces =
+            elmLogo.logo
+                |> List.map
+                    (\piece ->
+                        if not piece.selected then
+                            piece
+                        else
+                            { piece
+                                | position = calculateNewPoint position piece.mouseReference piece.position
+                            }
+                    )
+    in
+        { elmLogo | logo = pieces }
 
 
 rotatePieces : Model -> KeyCode -> Logo
 rotatePieces model keyCode =
     let
-        list =
+        elmLogo =
             model.elmLogo
+
+        list =
+            elmLogo.logo
 
         rotate =
             case Key.fromCode keyCode of
@@ -149,17 +172,20 @@ rotatePieces model keyCode =
 
                 _ ->
                     degrees 0
+
+        newPieces =
+            list
+                |> List.map
+                    (\piece ->
+                        if not piece.selected then
+                            piece
+                        else
+                            { piece
+                                | rotation = piece.rotation + rotate
+                            }
+                    )
     in
-        list
-            |> List.map
-                (\piece ->
-                    if not piece.selected then
-                        piece
-                    else
-                        { piece
-                            | rotation = piece.rotation + rotate
-                        }
-                )
+        { elmLogo | logo = newPieces }
 
 
 movePiecesToCenter : Point -> Logo -> Logo
@@ -169,12 +195,15 @@ movePiecesToCenter distance elmLogo =
             ( Tuple.first position + Tuple.first distance
             , Tuple.second position + Tuple.second distance
             )
+
+        pieces =
+            elmLogo.logo
+                |> List.map
+                    (\piece ->
+                        { piece
+                            | position = newPoint piece.position
+                            , mouseReference = Nothing
+                        }
+                    )
     in
-        elmLogo
-            |> List.map
-                (\piece ->
-                    { piece
-                        | position = newPoint piece.position
-                        , mouseReference = Nothing
-                    }
-                )
+        { elmLogo | logo = pieces }
